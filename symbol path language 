@@ -1,0 +1,11 @@
+flowchart TD
+ A["Proposed operation"] --> B["Inspect target and source refs"]
+ B --> C["Check main protection"]
+ C --> D{"Protected target?"}
+ D -->|Yes| E["BLOCK and explain"]
+ D -->|No| F["Inspect concurrent operations"]
+ F --> G["Preview changes and risks"]
+ G --> H{"PONS authorization valid?"}
+ H -->|No| I["HOLD"]
+ H -->|Yes| J["Execute scoped operation"]
+ J --> K["Verify hashes and provenance"]
