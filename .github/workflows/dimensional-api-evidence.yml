@@ -1,0 +1,35 @@
+name: ERIA dimensional release evidence
+on:
+  push:
+    tags: ["dimensional-api-v*"]
+permissions:
+  contents: read
+jobs:
+  evidence:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build immutable provenance manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-evidence
+          SOURCE_SHA256="$(find dimensional-api -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')"
+          cat > release-evidence/manifest.json <<EOF
+          {
+            "schema": "eria.release-evidence.v1",
+            "repository": "\${GITHUB_REPOSITORY}",
+            "commit": "\${GITHUB_SHA}",
+            "ref": "\${GITHUB_REF}",
+            "source_tree_sha256": "$SOURCE_SHA256",
+            "workflow_run": "\${GITHUB_SERVER_URL}/\${GITHUB_REPOSITORY}/actions/runs/\${GITHUB_RUN_ID}",
+            "created_at_utc": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "claim": "source provenance manifest; not a digital signature or independent AVS attestation"
+          }
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eria-release-evidence-\${{ github.ref_name }}
+          path: release-evidence/manifest.json
+          if-no-files-found: error
+          retention-days: 365
