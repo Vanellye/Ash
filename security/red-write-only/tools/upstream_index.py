@@ -89,12 +89,11 @@ def _load_and_validate_index(stream) -> tuple[int, str]:
 def _append_index(index_path: str, decision: dict) -> dict:
     """Append one tamper-evident record; fail closed if index cannot be updated."""
     path = Path(index_path)
-    flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+    flags = os.O_RDWR | os.O_APPEND | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
     fd = os.open(path, flags, 0o600)
     try:
         with os.fdopen(fd, "r+b", closefd=False) as stream:
             fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
-            # Validate the complete chain before extending it.
             stream.seek(0)
             data = stream.read()
             from io import BytesIO
@@ -110,8 +109,6 @@ def _append_index(index_path: str, decision: dict) -> dict:
             stream.flush()
             os.fsync(stream.fileno())
             return record
-    except Exception:
-        raise
     finally:
         os.close(fd)
 
@@ -128,8 +125,8 @@ def verify_upstream_before_mutation(
 ) -> dict:
     """Refresh upstream, compare pinned base, verify ancestry, and index outcome.
 
-    The caller must invoke this immediately before mutation and must stop on
-    any exception or a DENY decision. No fallback or override is provided.
+    Invoke immediately before mutation. Stop on any exception or DENY decision.
+    The result is check-only and never constitutes human approval.
     """
     event = {
         "event_id": str(uuid.uuid4()),
@@ -160,7 +157,7 @@ def verify_upstream_before_mutation(
         "decision": decision,
         "reason": reason,
     })
-    # If the independent index cannot record the result, no allow result is returned.
+    # If the index cannot record the result, no allow result is returned.
     record = _append_index(index_path, event)
     if decision != "ALLOW_CHECK_ONLY":
         raise UpstreamVerificationError(reason)
