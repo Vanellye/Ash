@@ -1,0 +1,104 @@
+name: ERIA dimensional API validated release
+on:
+  workflow_dispatch:
+  push:
+    tags: ["dimensional-api-v*"]
+permissions:
+  contents: read
+concurrency:
+  group: eria-dimensional-production
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - run: node --test dimensional-api/tests/*.test.mjs
+      - run: node --check dimensional-api/src/index.js
+  staging:
+    needs: verify
+    runs-on: ubuntu-24.04
+    environment: eria-staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - run: npm install --global wrangler
+      - name: Validate Cloudflare staging configuration
+        working-directory: dimensional-api
+        env:
+          D1_DATABASE_ID: \${{ vars.D1_DATABASE_ID }}
+          CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$D1_DATABASE_ID"; test -n "$CLOUDFLARE_API_TOKEN"; test -n "$CLOUDFLARE_ACCOUNT_ID"
+          sed -i "s/REPLACE_WITH_D1_DATABASE_ID/$D1_DATABASE_ID/" wrangler.toml
+      - name: Deploy staging and check health
+        working-directory: dimensional-api
+        env:
+          D1_DATABASE_ID: \${{ vars.D1_DATABASE_ID }}
+          CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STAGING_HEALTH_URL: \${{ vars.STAGING_HEALTH_URL }}
+        run: |
+          set -euo pipefail
+          sed -i "s/REPLACE_WITH_D1_DATABASE_ID/$D1_DATABASE_ID/" wrangler.toml
+          wrangler deploy --name eria-dimensional-api-staging
+          test -n "$STAGING_HEALTH_URL"
+          for n in {1..12}; do curl --fail --silent --show-error "$STAGING_HEALTH_URL/health" && exit 0; sleep 10; done
+          exit 1
+  production:
+    needs: staging
+    runs-on: ubuntu-24.04
+    environment: eria-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - run: npm install --global wrangler
+      - name: Upload immutable production version
+        id: upload
+        working-directory: dimensional-api
+        env:
+          D1_DATABASE_ID: \${{ vars.D1_DATABASE_ID }}
+          CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$D1_DATABASE_ID"; test -n "$CLOUDFLARE_API_TOKEN"; test -n "$CLOUDFLARE_ACCOUNT_ID"
+          sed -i "s/REPLACE_WITH_D1_DATABASE_ID/$D1_DATABASE_ID/" wrangler.toml
+          wrangler versions upload --name eria-dimensional-api --message "ERIA release \${GITHUB_SHA}" 2>&1 | tee upload.log
+          VERSION_ID="$(sed -nE 's/.*Version ID:[[:space:]]*([a-f0-9-]+).*/\\1/p' upload.log | tail -n1)"
+          test -n "$VERSION_ID"
+          echo "version_id=$VERSION_ID" >> "$GITHUB_OUTPUT"
+      - name: Canary at ten percent
+        env:
+          CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VERSION_ID: \${{ steps.upload.outputs.version_id }}
+          PRODUCTION_HEALTH_URL: \${{ vars.PRODUCTION_HEALTH_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$PRODUCTION_HEALTH_URL"
+          wrangler versions deploy "$VERSION_ID@10%" --name eria-dimensional-api
+          for n in {1..12}; do curl --fail --silent --show-error "$PRODUCTION_HEALTH_URL/health" && exit 0; sleep 10; done
+          exit 1
+      - name: Promote validated version to full traffic
+        env:
+          CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VERSION_ID: \${{ steps.upload.outputs.version_id }}
+        run: wrangler versions deploy "$VERSION_ID@100%" --name eria-dimensional-api
+      - name: Roll back to configured known-good version if release fails
+        if: failure()
+        env:
+          CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          KNOWN_GOOD_VERSION_ID: \${{ vars.KNOWN_GOOD_VERSION_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$KNOWN_GOOD_VERSION_ID"
+          wrangler versions deploy "$KNOWN_GOOD_VERSION_ID@100%" --name eria-dimensional-api

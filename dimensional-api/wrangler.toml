@@ -1,0 +1,10 @@
+name = "eria-dimensional-api"
+main = "src/index.js"
+compatibility_date = "2026-11-18"
+[[d1_databases]]
+binding = "DB"
+database_name = "eria-dimensional"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+[vars]
+ALLOWED_ORIGIN = "https://REPLACE-WITH-PAGES-ORIGIN"

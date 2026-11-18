@@ -1,0 +1,22 @@
+name: ERIA dimensional API CI
+on:
+  pull_request:
+    paths: ["dimensional-api/**", ".github/workflows/dimensional-api-ci.yml", ".github/workflows/dimensional-api-release.yml"]
+  push:
+    branches: ["feature/**"]
+    paths: ["dimensional-api/**", ".github/workflows/dimensional-api-ci.yml", ".github/workflows/dimensional-api-release.yml"]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - run: node --test dimensional-api/tests/*.test.mjs
+      - run: node --check dimensional-api/src/index.js
+      - name: Check for dangerous dynamic execution
+        run: |
+          set -euo pipefail
+          ! grep -RInE 'eval\\(|new Function\\(|child_process|process\\.env' dimensional-api/src
