@@ -1,0 +1,51 @@
+name: ERIA Fly.io deploy
+on:
+  push:
+    branches: ["feature/flyio-always-on"]
+    paths: ["dimensional-api/**", "fly.toml", ".github/workflows/flyio-deploy.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  deployments: write
+concurrency:
+  group: eria-flyio-deploy
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm test
+        working-directory: dimensional-api
+      - run: npm run check
+        working-directory: dimensional-api
+      - name: Build container image
+        run: docker build -f dimensional-api/Dockerfile -t eria-dimensional-api:ci .
+  deploy:
+    needs: verify
+    runs-on: ubuntu-24.04
+    environment: flyio-staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy validated build
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$FLY_API_TOKEN"
+          flyctl deploy --config fly.toml --remote-only --yes
+      - name: Verify deployment health
+        env:
+          FLY_APP_NAME: eria-dimensional-api
+        run: |
+          set -euo pipefail
+          URL="https://${FLY_APP_NAME}.fly.dev/health"
+          for attempt in {1..18}; do
+            if curl --fail --silent --show-error "$URL"; then exit 0; fi
+            sleep 10
+          done
+          exit 1
