@@ -1,13 +1,9 @@
-import hashlib
 import json
 import os
 import tempfile
 import unittest
 
-from tools.upstream_index import (
-    UpstreamVerificationError,
-    verify_upstream_before_mutation,
-)
+from tools.upstream_index import UpstreamVerificationError, verify_upstream_before_mutation
 
 UPSTREAM = "a" * 40
 HEAD = "b" * 40
@@ -32,21 +28,26 @@ class UpstreamIndexTests(unittest.TestCase):
             ancestry_check=lambda base, head: ancestor,
         )
 
-    def test_fresh_upstream_is_allowed_for_check_only_and_indexed(self):
+    def test_fresh_upstream_is_check_only_and_indexed(self):
         result = self.run_gate()
         self.assertEqual(result["decision"], "ALLOW_CHECK_ONLY")
         self.assertEqual(result["index_record"]["sequence"], 1)
-        self.assertEqual(result["index_record"]["decision"], "ALLOW_CHECK_ONLY")
+        self.assertEqual(result["index_record"]["next_action"], "CONTINUE_TO_SEPARATE_AUTHORIZATION")
 
-    def test_upstream_moved_is_denied_and_indexed(self):
-        with self.assertRaisesRegex(UpstreamVerificationError, "upstream_moved_since_pinned_base"):
+    def test_upstream_moved_is_logged_with_fix_guidance(self):
+        with self.assertRaisesRegex(UpstreamVerificationError, "upstream_moved_since_pinned_base") as caught:
             self.run_gate(remote="c" * 40)
-        rows = open(self.index, "r", encoding="utf-8").readlines()
-        self.assertEqual(json.loads(rows[-1])["decision"], "DENY")
+        self.assertEqual(caught.exception.index_record["decision"], "DENY")
+        self.assertEqual(caught.exception.index_record["next_action"], "LOG_AND_FIX")
+        self.assertIn("Fetch/review", caught.exception.remediation)
+        rows = [json.loads(line) for line in open(self.index, encoding="utf-8")]
+        self.assertEqual(rows[-1]["decision"], "DENY")
+        self.assertTrue(rows[-1]["remediation"])
 
-    def test_branch_missing_upstream_ancestor_is_denied(self):
-        with self.assertRaisesRegex(UpstreamVerificationError, "current_head_does_not_contain_upstream"):
+    def test_branch_missing_upstream_ancestor_is_logged(self):
+        with self.assertRaisesRegex(UpstreamVerificationError, "current_head_does_not_contain_upstream") as caught:
             self.run_gate(ancestor=False)
+        self.assertEqual(caught.exception.index_record["next_action"], "LOG_AND_FIX")
 
     def test_index_revolves_with_hash_chain(self):
         self.run_gate()
@@ -66,9 +67,11 @@ class UpstreamIndexTests(unittest.TestCase):
         with self.assertRaisesRegex(UpstreamVerificationError, "index_record_hash_mismatch"):
             self.run_gate()
 
-    def test_invalid_expected_sha_is_denied(self):
-        with self.assertRaisesRegex(UpstreamVerificationError, "expected_upstream_sha_invalid"):
+    def test_invalid_expected_sha_is_logged_with_remediation(self):
+        with self.assertRaisesRegex(UpstreamVerificationError, "expected_upstream_sha_invalid") as caught:
             self.run_gate(expected="not-a-sha")
+        self.assertEqual(caught.exception.index_record["decision"], "DENY")
+        self.assertIn("trusted event", caught.exception.remediation)
 
 
 if __name__ == "__main__":
