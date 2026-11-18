@@ -31,12 +31,19 @@ class GuardDecision:
 
 
 class ExecutionBoundaryGuard:
-    """One shared deny-by-default gate used immediately before storage."""
+    """Deny-by-default gate; upstream freshness is checked on every authorize call."""
 
-    def __init__(self, grant_verifier: Callable[[AuthorizationGrant], bool]):
+    def __init__(
+        self,
+        grant_verifier: Callable[[AuthorizationGrant], bool],
+        upstream_verifier: Callable[[], object],
+    ):
         if not callable(grant_verifier):
             raise TypeError("a trusted grant_verifier is required")
+        if not callable(upstream_verifier):
+            raise TypeError("a live upstream_verifier is required")
         self._verify = grant_verifier
+        self._verify_upstream = upstream_verifier
 
     def authorize(self, operation: str, path: str,
                   grant: Optional[AuthorizationGrant], now: Optional[int] = None) -> GuardDecision:
@@ -58,9 +65,17 @@ class ExecutionBoundaryGuard:
         if grant.expires_at <= (int(time.time()) if now is None else now):
             return GuardDecision(False, "authorization_expired")
         try:
-            verified = self._verify(grant)
+            if not self._verify(grant):
+                return GuardDecision(False, "authorization_verification_failed")
         except Exception:
-            verified = False
-        if not verified:
             return GuardDecision(False, "authorization_verification_failed")
-        return GuardDecision(True, "authorized_create_only")
+        # Resolve upstream immediately before returning permission to the storage boundary.
+        try:
+            upstream_result = self._verify_upstream()
+            if upstream_result is False:
+                return GuardDecision(False, "upstream_verification_failed")
+            if isinstance(upstream_result, dict) and upstream_result.get("decision") != "ALLOW_CHECK_ONLY":
+                return GuardDecision(False, "upstream_verification_failed")
+        except Exception:
+            return GuardDecision(False, "upstream_verification_failed")
+        return GuardDecision(True, "authorized_create_only_upstream_verified")
