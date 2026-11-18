@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ERIA · Mockingbird</title>
+  <meta name="description" content="Synthetic prompt testing console for ERIA.">
+  <style>
+    :root{color-scheme:dark;font:16px system-ui;background:#10151d;color:#eef3fa}
+    body{max-width:760px;margin:8vh auto;padding:24px}
+    main{border:1px solid #334155;border-radius:18px;padding:24px;background:#18212d}
+    textarea,input,button{box-sizing:border-box;width:100%;margin-top:12px;padding:13px;border-radius:9px;border:1px solid #475569;background:#0f1722;color:inherit}
+    button{cursor:pointer;background:#245c8f;border:0;font-weight:700}
+    pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0c121a;padding:16px;border-radius:9px}
+    small{color:#aab8c8}
+  </style>
+</head>
+<body><main>
+  <h1>ERIA · Mockingbird</h1>
+  <p>Synthetic prompt fixtures for controlled interaction testing.</p>
+  <label for="endpoint">Worker endpoint</label>
+  <input id="endpoint" type="url" placeholder="https://your-worker.workers.dev">
+  <label for="token">Test token (sent only to your Worker)</label>
+  <input id="token" type="password" autocomplete="off">
+  <label for="seed">Seed prompt</label>
+  <textarea id="seed" rows="4" placeholder="Describe the scenario to stress-test"></textarea>
+  <button id="run">Generate synthetic prompts</button>
+  <pre id="output" aria-live="polite">Waiting for input…</pre>
+  <small>Generated prompts are test data. They do not impersonate a person or authorize actions.</small>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+$("run").addEventListener("click",async()=>{
+  const endpoint=$("endpoint").value.replace(/\/$/,"");
+  if(!endpoint||!$("seed").value.trim()){ $("output").textContent="Enter a Worker endpoint and seed prompt."; return; }
+  $("run").disabled=true;
+  try{
+    const r=await fetch(endpoint+"/mockingbird/stress",{method:"POST",headers:{"content-type":"application/json","authorization":"Bearer "+$("token").value},body:JSON.stringify({seed:$("seed").value})});
+    $("output").textContent=JSON.stringify(await r.json(),null,2);
+  }catch(e){$("output").textContent=String(e);}
+  finally{$("run").disabled=false;}
+});
+</script></body></html>

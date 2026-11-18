@@ -1,0 +1,44 @@
+name: Blacksmith validation
+on:
+  push:
+    branches: [feature/cloudflare-workers-pages]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate shell
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          bash -n ./blacksmith.sh
+          shellcheck ./blacksmith.sh
+      - name: Install Worker dependencies
+        working-directory: worker
+        run: npm install
+      - name: Type-check Worker
+        working-directory: worker
+        run: npm run typecheck
+      - name: Validate Pages and Kotlin source presence
+        run: |
+          test -s pages/index.html
+          test -s mockingbird/src/main/kotlin/eria/mockingbird/Mockingbird.kt
+      - name: Create immutable checksums
+        run: |
+          mkdir -p release-records/${GITHUB_SHA}
+          find worker pages mockingbird -type f -print0 | sort -z | xargs -0 sha256sum > release-records/${GITHUB_SHA}/SHA256SUMS
+          printf '%s\n' "$GITHUB_SHA" > release-records/${GITHUB_SHA}/RELEASE_ID
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blacksmith-release-${{ github.sha }}
+          path: release-records/${{ github.sha }}/
+          if-no-files-found: error
+          retention-days: 90
