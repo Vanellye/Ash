@@ -13,7 +13,11 @@ class StorageBoundaryTests(unittest.TestCase):
         for name in ("reports", "evidence-manifests", "proposals"):
             os.mkdir(os.path.join(self.root, name), 0o700)
         self.root_fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        self.guard = ExecutionBoundaryGuard(lambda grant: grant.signature == "test-valid")
+        self.upstream_calls = []
+        self.guard = ExecutionBoundaryGuard(
+            lambda grant: grant.signature == "test-valid",
+            lambda: self.upstream_calls.append("checked") or {"decision": "ALLOW_CHECK_ONLY"},
+        )
         self.events = []
         self.adapter = CreateOnlyStorageAdapter(self.root_fd, self.guard, self.events.append)
         self.grant = AuthorizationGrant(
@@ -33,13 +37,28 @@ class StorageBoundaryTests(unittest.TestCase):
         os.close(self.root_fd)
         self.temp.cleanup()
 
-    def test_authorized_create_is_private_and_new(self):
+    def test_authorized_create_checks_upstream_at_mutation_boundary(self):
         result = self.adapter.create("create_new_report", "reports/result.txt", b"synthetic report", self.grant)
         target = os.path.join(self.root, "reports", "result.txt")
         self.assertTrue(result["created"])
         self.assertEqual(result["mode"], 0o600)
         self.assertEqual(os.stat(target).st_mode & 0o777, 0o600)
-        self.assertEqual(open(target, "rb").read(), b"synthetic report")
+        with open(target, "rb") as stream:
+            self.assertEqual(stream.read(), b"synthetic report")
+        self.assertEqual(len(self.upstream_calls), 1)
+
+    def test_upstream_failure_blocks_mutation(self):
+        guard = ExecutionBoundaryGuard(
+            lambda grant: True,
+            lambda: {"decision": "DENY"},
+        )
+        adapter = CreateOnlyStorageAdapter(self.root_fd, guard, self.events.append)
+        try:
+            with self.assertRaisesRegex(StorageDenied, "upstream_verification_failed"):
+                adapter.create("create_new_report", "reports/blocked.txt", b"x", self.grant)
+            self.assertFalse(os.path.exists(os.path.join(self.root, "reports", "blocked.txt")))
+        finally:
+            adapter.close()
 
     def test_existing_file_cannot_be_overwritten(self):
         target = os.path.join(self.root, "reports", "existing.txt")
@@ -47,7 +66,8 @@ class StorageBoundaryTests(unittest.TestCase):
             stream.write(b"original")
         with self.assertRaisesRegex(StorageDenied, "create_only_existing_target_denied"):
             self.adapter.create("create_new_report", "reports/existing.txt", b"replacement", self.grant)
-        self.assertEqual(open(target, "rb").read(), b"original")
+        with open(target, "rb") as stream:
+            self.assertEqual(stream.read(), b"original")
 
     def test_source_tree_modification_denied(self):
         with self.assertRaises(StorageDenied):
