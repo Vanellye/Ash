@@ -46,6 +46,7 @@ jobs:
         run: |
           set -euo pipefail
           sed -i "s/REPLACE_WITH_D1_DATABASE_ID/$D1_DATABASE_ID/" wrangler.toml
+          wrangler d1 migrations apply eria-dimensional --remote
           wrangler deploy --name eria-dimensional-api-staging
           test -n "$STAGING_HEALTH_URL"
           for n in {1..12}; do curl --fail --silent --show-error "$STAGING_HEALTH_URL/health" && exit 0; sleep 10; done
@@ -92,6 +93,13 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           VERSION_ID: \${{ steps.upload.outputs.version_id }}
         run: wrangler versions deploy "$VERSION_ID@100%" --name eria-dimensional-api
+      - name: Verify full production rollout
+        env:
+          PRODUCTION_HEALTH_URL: ${{ vars.PRODUCTION_HEALTH_URL }}
+        run: |
+          set -euo pipefail
+          for n in {1..12}; do curl --fail --silent --show-error "$PRODUCTION_HEALTH_URL/health" && exit 0; sleep 10; done
+          exit 1
       - name: Roll back to configured known-good version if release fails
         if: failure()
         env:
