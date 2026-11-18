@@ -19,12 +19,19 @@ Create-new only. Existing files are never overwritten or deleted.
 ## Shared execution boundary and storage enforcement
 
 - `tools/validate_policy.py` is the pure path/operation policy validator.
-- `tools/execution_boundary_guard.py` defines the shared provider-neutral `ExecutionBoundaryGuard`. It requires an explicit, operation-specific, scoped, time-bounded, non-revoked human grant and an injected trusted grant verifier.
+- `tools/execution_boundary_guard.py` defines the shared provider-neutral `ExecutionBoundaryGuard`. It requires an explicit, operation-specific, scoped, time-bounded, non-revoked human grant, an injected trusted grant verifier, and a live upstream verifier. The upstream verifier runs on every authorization attempt immediately before storage; any exception or non-allow result blocks the write.
+- `tools/upstream_index.py` resolves the configured upstream ref live with `git ls-remote`, compares it with an independently supplied pinned SHA, verifies that the current local HEAD contains that upstream commit, and records every allow/deny result in a hash-chained JSONL rolling index. The index is append-only and mode `0600`; corruption, gaps, or inability to append fail closed.
 - `tools/storage_adapter.py` is the actual filesystem mutation boundary. It requires a pre-opened trusted output-root directory descriptor and an append-only audit sink. It traverses pre-existing directories using directory descriptors and no-follow flags, then creates files with `O_CREAT | O_EXCL | O_NOFOLLOW` and owner-only mode `0600`. Existing targets, symlink traversal, invalid scopes, and unverified grants fail closed.
-- `tests/test_storage_adapter.py` exercises the real adapter against temporary synthetic directories. No production repository files are targets.
-- `.github/workflows/eria-write-only-boundary.yml` runs this suite in isolated CI.
+- `tests/test_storage_adapter.py` and `tests/test_upstream_index.py` exercise the boundary and index against synthetic fixtures. No production repository files are targets.
+- `.github/workflows/eria-write-only-boundary.yml` runs the isolated suite in CI.
 
-The injected grant verifier is a required integration point, not a placeholder authorization scheme: production wiring must validate an authentic approval issued by the trusted human-approval authority and check current revocation state. The adapter does not mint grants. The host must provision the output root and the append-only audit sink securely. This code is not a complete OS sandbox and does not make arbitrary host processes safe.
+### Wiring the live verifier
+
+Construct the guard with a closure that calls `verify_upstream_before_mutation(...)` using a pinned upstream SHA from a separately trusted event, the exact upstream URL/ref, current HEAD SHA, and a durable index path. Do not derive the expected SHA from the same mutable local checkout being checked. A successful upstream check is check-only; it is not human approval and does not authorize a mutation by itself.
+
+The hash chain detects accidental or unsophisticated alteration of the local index. It is not independently tamper-proof if an attacker can rewrite the whole file. For independent anchoring, mirror each index head hash to a separately administered append-only store or trusted transparency service. The verifier does not itself provide that external service.
+
+The injected grant verifier is a required integration point, not a placeholder authorization scheme: production wiring must validate an authentic approval issued by the trusted human-approval authority and check current revocation state. The adapter does not mint grants. The host must provision the output root and append-only audit sink securely. This code is not a complete OS sandbox and does not make arbitrary host processes safe.
 
 ## Explicitly denied
 
