@@ -4,6 +4,7 @@ integration:
   canonical_repository: Vanellye/CodEXgen
   canonical_branch: feature/basespace-canonical-index-v0.1
   canonical_pull_request: 106
+  canonical_commit_sha: 4f2fe6c8fc4d0b6310c7199efc6bf74655ea0247
   schema_path: basespace/schema/historical-record.schema.json
   registry_path: basespace/registry/seed-records.json
   expected_schema_version: "0.1"
