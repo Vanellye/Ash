@@ -1,0 +1,28 @@
+schema_version: "0.1"
+integration:
+  role: read_only_consumer
+  canonical_repository: Vanellye/CodEXgen
+  canonical_branch: feature/basespace-canonical-index-v0.1
+  canonical_pull_request: 106
+  schema_path: basespace/schema/historical-record.schema.json
+  registry_path: basespace/registry/seed-records.json
+  expected_schema_version: "0.1"
+  activation_state: pending_canonical_merge
+  access:
+    repository_contents: read_only
+    canonical_registry_mutation: forbidden
+    upstream_writeback: forbidden
+  integrity:
+    require_commit_sha_pinning: true
+    verify_record_schema: true
+    verify_source_hash_when_present: true
+    accept_null_source_hash_for_metadata_only: true
+  provenance:
+    record_upstream_repository: true
+    record_upstream_commit: true
+    record_retrieval_time: true
+    preserve_source_lineage: true
+  governance:
+    no_automatic_merge: true
+    no_main_branch_writes: true
+    human_review_for_local_changes: true
