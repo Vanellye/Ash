@@ -1,0 +1,18 @@
+{
+  "request_id": "example-only-0001",
+  "capability": "WISE.TRANSFER.PREPARE",
+  "policy_id": "ERIA-WISETAGS",
+  "policy_version": "0.1.0",
+  "account_id": "REDACTED_EXAMPLE_ACCOUNT",
+  "beneficiary_id": "REDACTED_EXAMPLE_BENEFICIARY",
+  "amount": "0.00",
+  "currency": "USD",
+  "quote_id": null,
+  "request_digest": "NOT_COMPUTED_EXAMPLE_ONLY",
+  "requested_by": "example-requester",
+  "requested_at": "2026-11-23T00:00:00Z",
+  "expires_at": "2026-11-23T00:05:00Z",
+  "approval_ref": null,
+  "decision": "DENY_UNTIL_VALIDATION_AND_AUTHORIZATION",
+  "note": "Synthetic example. Not a real Wise account, beneficiary, quote, or transfer."
+}
