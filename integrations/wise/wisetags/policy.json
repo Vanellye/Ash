@@ -1,0 +1,57 @@
+{
+  "policy_id": "ERIA-WISETAGS",
+  "version": "0.1.0",
+  "status": "design_only",
+  "provider": "Wise",
+  "native_provider_feature": false,
+  "default_decision": "DENY",
+  "execution_mode": "PREPARE_ONLY",
+  "live_provider_access": false,
+  "capabilities": {
+    "WISE.READ": {"class": "read", "enabled_by_spec": true},
+    "WISE.BENEFICIARY.VERIFY": {"class": "read_verify", "enabled_by_spec": true, "mutation": false},
+    "WISE.TRANSFER.PREPARE": {"class": "prepare", "enabled_by_spec": true, "submits": false},
+    "WISE.TRANSFER.REVIEW": {"class": "review", "enabled_by_spec": true},
+    "WISE.TRANSFER.APPROVE": {"class": "approval", "enabled_by_spec": true, "approves_exact_digest": true},
+    "WISE.TRANSFER.SUBMIT": {"class": "external_write", "enabled_by_spec": false, "requires_independent_live_gate": true},
+    "WISE.RECONCILE": {"class": "read", "enabled_by_spec": true},
+    "WISE.LIMIT.CONFIGURE": {"class": "proposal", "enabled_by_spec": true, "applies_change": false}
+  },
+  "approval": {
+    "human_approval_required_for_consequential_operations": true,
+    "independent_reviewer_required_for_transfer_submission": true,
+    "requester_may_self_approve": false,
+    "bind_to_request_digest": true,
+    "bind_fields": ["account_id", "beneficiary_id", "amount", "currency", "quote_id", "operation"],
+    "time_bounded": true,
+    "revocable": true,
+    "single_use": true,
+    "replay_protection_required": true
+  },
+  "transfer_submission": {
+    "enabled": false,
+    "requires_explicit_final_user_confirmation": true,
+    "requires_verified_beneficiary": true,
+    "requires_amount_currency_fee_limit_checks": true,
+    "requires_provider_status_reconciliation": true,
+    "background_submission": false,
+    "webhook_submission": false,
+    "automatic_retry_submission": false
+  },
+  "audit": {
+    "append_only": true,
+    "record_allow_deny_error_cancel": true,
+    "record_credentials": false,
+    "record_tokens": false,
+    "record_secret_fingerprints": false
+  },
+  "purge": {
+    "delete_existing_repository_safeguards": false,
+    "allow_removal_only_after": [
+      "path_by_path_inventory",
+      "documented_replacement_mapping",
+      "regression_tests_pass",
+      "independent_human_review"
+    ]
+  }
+}
