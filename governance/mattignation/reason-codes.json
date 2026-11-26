@@ -1,0 +1,33 @@
+{
+  "version": "1.0.0",
+  "maturity": [
+    "RECEIVED",
+    "NORMALIZED",
+    "CLASSIFIED",
+    "ENRICHED",
+    "CORROBORATED",
+    "VALIDATED",
+    "PUBLISHED"
+  ],
+  "mitigation": [
+    "CLEAR",
+    "FLAGGED",
+    "QUARANTINED",
+    "CORRECTION_REQUIRED",
+    "SUPERSEDED",
+    "RETIRED"
+  ],
+  "reasons": [
+    "MISSING_PROVENANCE",
+    "CONTRADICTION",
+    "STALE",
+    "LOW_EVIDENCE",
+    "PRIVACY_RISK",
+    "UNSAFE_USE",
+    "SCHEMA_INVALID",
+    "SOURCE_UNTRUSTED",
+    "MODEL_DRIFT",
+    "UNKNOWN"
+  ],
+  "rule": "No record with mitigation state QUARANTINED, CORRECTION_REQUIRED, SUPERSEDED, or RETIRED may be treated as trusted current knowledge."
+}
